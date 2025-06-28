@@ -1,1 +1,157 @@
+import tkinter as tk
+from tkinter import filedialog, ttk, messagebox
+from PIL import Image, ImageTk, ImageDraw, ImageChops, ImageStat
+import cv2
+import numpy as np
 
+def load_image():
+    """Loads a grayscale medical image and resets."""
+    global img_path, original_img, img_tk, highlighted_img_tk, colorized_img_tk
+    img_path = filedialog.askopenfilename(title="Select Grayscale Medical Image", filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.bmp")])
+
+    if img_path:
+        try:
+            original_img = Image.open(img_path).convert("L")
+            img_tk = ImageTk.PhotoImage(original_img.resize((300, 300)))
+            canvas_original.config(width=300, height=300)
+            canvas_original.create_image(0, 0, anchor=tk.NW, image=img_tk)
+            highlighted_img_tk = None
+            canvas_highlighted.delete("highlight")
+            colorized_img_tk = None
+            canvas_colorized.delete("colorized")
+            quality_label.config(text="Quality: N/A") # reset quality
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading image: {e}")
+
+def colorize_image():
+    """Colorizes the loaded image and calculates quality."""
+    global colorized_img_tk, original_img
+    if original_img:
+        try:
+            img_np = np.array(original_img)
+            colormap = getattr(cv2, f"COLORMAP_{colormap_combobox.get().upper()}")
+            colorized_img_np = cv2.applyColorMap(img_np, colormap)
+            colorized_img = Image.fromarray(colorized_img_np)
+            colorized_img_tk = ImageTk.PhotoImage(colorized_img.resize((300, 300)))
+            canvas_colorized.config(width=300, height=300)
+            canvas_colorized.create_image(0, 0, anchor=tk.NW, image=colorized_img_tk, tags="colorized")
+
+            calculate_quality(original_img, colorized_img)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error colorizing image: {e}")
+
+def calculate_quality(original_img, colorized_img):
+    """Calculates the quality of colorization."""
+    try:
+        diff_img = ImageChops.difference(original_img.convert("RGB"), colorized_img.convert("RGB"))
+        stat = ImageStat.Stat(diff_img.convert("L"))
+        rms = stat.rms[0]
+        max_diff = 255.0
+        quality_percentage = (1 - (rms / max_diff)) * 100
+        quality_label.config(text=f"Quality: {quality_percentage:.2f}%")
+    except Exception as e:
+        quality_label.config(text="Quality: Error")
+        messagebox.showerror("Quality Error", f"Error calculating quality: {e}")
+
+def highlight_disease():
+    """Highlights a simulated disease area."""
+    global highlighted_img_tk, original_img
+    if original_img:
+        try:
+            highlighted_img = original_img.copy()
+            draw = ImageDraw.Draw(highlighted_img)
+            width, height = highlighted_img.size
+            x1, y1, x2, y2 = width // 4, height // 4, 3 * width // 4, 3 * height // 4
+            draw.rectangle([x1, y1, x2, y2], outline="red", width=3)
+            highlighted_img_tk = ImageTk.PhotoImage(highlighted_img.resize((300, 300)))
+            canvas_highlighted.config(width=300, height=300)
+            canvas_highlighted.create_image(0, 0, anchor=tk.NW, image=highlighted_img_tk, tags="highlight")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error highlighting disease: {e}")
+
+# --- GUI Setup ---
+root = tk.Tk()
+root.title("Medical Image Analysis")
+root.configure(bg="#f0f8ff")
+
+style = ttk.Style()
+style.configure("TFrame", background="#e0f2f7")
+style.configure("TLabel", background="#f0f8ff")
+style.configure("Heading.TLabel", font=("Arial", 20, "bold"))
+
+heading_label = ttk.Label(root, text="Medical Image Analysis and Colorization", style="Heading.TLabel", padding=(20, 10))
+heading_label.pack()
+
+frame_images = ttk.Frame(root, padding="10", style="TFrame")
+frame_images.pack()
+
+canvas_original = tk.Canvas(frame_images, relief=tk.RAISED, borderwidth=2, bg="white")
+canvas_original.grid(row=0, column=0, padx=20, pady=20)
+
+canvas_highlighted = tk.Canvas(frame_images, relief=tk.RAISED, borderwidth=2, bg="white")
+canvas_highlighted.grid(row=0, column=1, padx=20, pady=20)
+
+canvas_colorized = tk.Canvas(frame_images, relief=tk.RAISED, borderwidth=2, bg="white")
+canvas_colorized.grid(row=0, column=2, padx=20, pady=20)
+
+frame_controls = ttk.Frame(root, padding="10", style="TFrame")
+frame_controls.pack()
+
+button_load = ttk.Button(frame_controls, text="Load Image", command=load_image)
+button_load.grid(row=0, column=0, padx=10, pady=10)
+
+button_highlight = ttk.Button(frame_controls, text="Highlight Disease", command=highlight_disease)
+button_highlight.grid(row=0, column=1, padx=10, pady=10)
+
+colormap_options = ["jet", "viridis", "inferno", "magma", "plasma", "gray", "hot", "cool"]
+colormap_combobox = ttk.Combobox(frame_controls, values=colormap_options)
+colormap_combobox.grid(row=0, column=2, padx=10, pady=10)
+colormap_combobox.current(0)
+
+button_colorize = ttk.Button(frame_controls, text="Colorize", command=colorize_image)
+button_colorize.grid(row=0, column=3, padx=10, pady=10)
+
+quality_label = ttk.Label(frame_controls, text="Quality: N/A")
+quality_label.grid(row=1, column=2, padx=10, pady=10)
+
+img_path, original_img, img_tk, highlighted_img_tk, colorized_img_tk = None, None, None, None, None
+
+root.mainloop()
+
+# Description of Colorizing Techniques:
+
+# 1. Jet:
+#   - A rainbow-like colormap, transitioning from blue to red.
+#   - Often used for visualizing temperature or intensity variations.
+#   - Can introduce artificial banding in images.
+
+# 2. Viridis:
+#   - A perceptually uniform colormap, designed to be visually consistent.
+#   - Transitions smoothly from dark purple to yellow.
+#   - Suitable for scientific visualization and data representation.
+
+# 3. Inferno:
+#   - Similar to Viridis, but with a warmer color palette.
+#   - Transitions from black to bright yellow.
+#   - Useful for highlighting high-intensity regions.
+
+# 4. Magma:
+#   - Another perceptually uniform colormap, transitioning from dark purple to bright yellow.
+#   - Good for representing data with a wide range of values.
+
+# 5. Plasma:
+#   - A perceptually uniform colormap, transitioning from dark blue to bright yellow.
+#   - Provides good contrast and visual clarity.
+
+# 6. Gray:
+#   - Shows the image in grayscale, without any colorization.
+#   - Useful for comparing the original image with colorized versions.
+
+# 7. Hot:
+#   - Transitions from black to white, with red and yellow in between.
+#   - Often used to represent heat or intensity.
+
+# 8. Cool:
+#   - Transitions from dark blue to white, with cyan and light green in between.
+#   - Provides a cool, calming appearance.
